@@ -1,0 +1,129 @@
+---
+title: "Linear Regression Analysis- Utah Population Projection"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+#Load the Libraries
+library(dplyr)
+library(ggthemes)
+library(ggplot2)
+library(ggExtra)
+library(readr)
+library(tidyr)
+library(ISLR) #mathematical models
+library(caTools)
+library(class)
+library(e1071)
+library(corrplot) 
+library(knitr)
+```
+
+
+*Written by Savahnna L. Cunningham*
+
+*Date: September 15, 2018*
+
+
+
+```{r message=FALSE, warning=FALSE}
+# Load the Data
+UT_data<- read_csv("~/Desktop/MSDA Portfolio/2. DS Tools & Techniques/P2. R/ut_census.csv")
+
+View(UT_data)
+```
+
+# Introduction
+
+Conduct a linear regession analysis using the U.S. Census Bureau data for the state of Utah to predict the size of the population in 2020.
+
+```{r message=FALSE, warning=FALSE}
+# Split the dataset into the Training set and Test set
+set.seed(123)
+split = sample.split(UT_data$Pop_Est, SplitRatio = 2/3)
+training_set = subset(UT_data, split == TRUE)
+test_set = subset(UT_data, split == FALSE)
+
+# Fit the Simple Linear Regression to the Training set
+regressor = lm(formula = Pop_Est ~ Year,
+               data = training_set)
+```
+
+
+
+```{r message=FALSE, warning=FALSE}
+#Predict the Test set results
+y_pred = predict.lm(regressor, newdata = test_set,interval = "prediction",level = 0.95)
+
+#Visualize the result
+smoothScatter(y_pred,pch = ".", cex = 5, 
+                     col = "black",colramp = 
+                     colorRampPalette(c("white", blues9)),
+                     xlab = "Fit", 
+                     ylab = "Model Prediction",
+                     main="Predicted Future Values ")
+```
+
+The visualization represents the 95% prediction interval with data points<br> 
+representing the models predicted values. As you can see, the model did very<br>
+well predicting the population estimate, as all data points are within the<br>
+prediction interval. 
+
+
+```{r message=FALSE, warning=FALSE}
+summary(regressor)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+#Confidence Interval for the Utah population estimate for the year 2020  
+y_pred <- lm(regressor, data = test_set)
+new_data <-data.frame(Year=2020)
+utah_predict<- predict(y_pred,new_data,interval="predict",level=.95)
+utah_predict
+```
+
+Using a 95% confidence interval, the results of the linear regression model indicate the estimated population for the state of Utah will be between 3,002,358 and 3,505,925 people. 
+
+```{r message=FALSE, warning=FALSE}
+#Utah state population estimate for the year 2020
+utah_predict<- predict(y_pred,new_data)
+utah_predict
+```
+
+The Linear Regression model result for the 2020 Utah state population is 3,254,141 people.
+
+
+Population prediction for the state of Utah in 5 years time.
+
+
+```{r message=FALSE, warning=FALSE}
+#Confidence Interval for the Utah population estimate for the year 2023  
+y_pred <- lm(regressor, data = test_set)
+new_data <-data.frame(Year=2023)
+utah_predict<- predict(y_pred,new_data,interval="predict",level=.95)
+utah_predict
+```
+
+Using a 95% confidence interval, the results of the linear regression model indicate the estimated population for the state of Utah will be between 3,049,965 and 3,766,552 people. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#Utah state population estimate for the year 2023
+utah_predict<- predict(y_pred,new_data)
+utah_predict
+```
+
+Predicted Utah state population for the year 2023 is 3,408,259 people.
+
+
