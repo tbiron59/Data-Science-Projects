@@ -17,23 +17,23 @@ Part 2_R - File contains the R code used in the linear regession analysis and cl
 ### Software and Libraries
 
         Python -
-        pandas 
-        requests
-        BeautifulSoup
-        lxml
-        csv
-        re
+                pandas 
+                requests
+                BeautifulSoup
+                lxml
+                csv
+                re
         
         R - 
-        dplyr
-        ggthemes
-        ggplot2
-        ggExtra
-        readr
-        tidyr
-        ISLR
-        caTools
-        class
-        e1071
-        corrplot
-        knitr
+                dplyr
+                ggthemes
+                ggplot2
+                ggExtra
+                readr
+                tidyr
+                ISLR
+                caTools
+                class
+                e1071
+                corrplot
+                knitr
