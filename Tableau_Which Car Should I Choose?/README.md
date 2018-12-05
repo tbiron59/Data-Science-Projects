@@ -1,8 +1,8 @@
-# U.S. Census Bureau - Predictive Analysis 
+# Which Car Should I Choose? A Data Vizualization Project
 
 ### *MS Data Analytics Project*
 
-This folder contains the files for the U.S. Census Bureau - Predictive Analysis project. 
+This folder contains the files for the Which Car Should I Choose? A Data Vizualization Project project. 
 
 
 #### Goal of Project
