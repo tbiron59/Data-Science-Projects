@@ -2,7 +2,7 @@
 
 ### *MS Data Analytics Project*
 
-This folder contains the files for the U.S. Census Bureau - Predictive Analysis 
+This folder contains the files for the U.S. Census Bureau - Predictive Analysis project. 
 
 
 #### Goal of Project
