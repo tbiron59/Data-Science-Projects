@@ -1,4 +1,4 @@
-# Which Car Should I Choose? A Data Vizualization Project
+# Which Car Should I Choose? 
 
 ### *MS Data Analytics Project*
 
