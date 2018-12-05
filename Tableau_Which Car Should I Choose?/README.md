@@ -11,10 +11,10 @@ You have been hired as a data analyst and one of your first tasks includes selec
 
 Files: 
 
-The following artifacts are required to be submitted as part of this task:
-
 data files (raw and cleaned) in spreadsheet format
+
 dashboard and graphical representations of each data set, as created in Tableau (.pdf)
+
 data summary report pdf
 
 #### Software and Libraries
