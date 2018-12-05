@@ -11,7 +11,7 @@ You have been hired as a data analyst and one of your first tasks includes selec
 
 Files: 
 
-data files (raw and cleaned) in spreadsheet format
+which_car_data.xlsx - Data File
 
 dashboard and graphical representations of each data set, as created in Tableau (.pdf)
 
