@@ -15,7 +15,7 @@ which_car_data.xlsx - Data File
 
 dashboard and graphical representations of each data set, as created in Tableau (.pdf)
 
-data summary report pdf
+Write Up.pdf- data summary report
 
 #### Software and Libraries
 
