@@ -1,0 +1,1187 @@
+---
+title: 'Telcommunications Churn Analysis'
+output:
+  pdf_document: default
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+#Load the Libraries
+library(caret)
+library(caTools)
+library(class)
+library(corrplot)
+library(data.table)
+library(dplyr)
+library(dummies)
+library(e1071)
+library(factoextra)
+library(ggthemes)
+library(ggplot2)
+library(ggExtra)
+require(GGally)
+library(gridExtra)
+library(Hmisc)  #summary stats
+library(ISLR)
+library(knitr)
+library(MASS)
+library(plyr)
+library(party)
+library(partykit)
+library(randomForest)
+library(readxl)
+library(readr)
+library(rattle)
+library(rpart.plot)
+library(RColorBrewer)
+library(PerformanceAnalytics)
+library(writexl)
+library(visreg) # This library shows multivariate graphs.
+```
+
+
+*Written by Savahnna L. Cunningham*
+
+
+# Introduction
+
+You are an analyst for a telecommunications company that is concerned about the<br>
+number of customers leaving their landline business for cable competitors. The<br>
+company needs to know which customers are leaving and attempt to mitigate<br>
+continued customer loss. You have been asked to analyze customer data to<br>
+identify why customers are leaving and potential indicators to explain why those<br>
+customers are leaving so the company can make an informed plan to mitigate<br>
+further loss.
+
+------
+
+#Methods & Analysis
+
+## Data Gathering 
+
+```{r message=FALSE, warning=FALSE}
+# Load the Data
+churn <- read_csv("~/Desktop/MSDA Portfolio/4.Data Mining/Data/2. Processed Data/Telco_Churn.csv")
+```
+
+Summary table representing the structure of the dataset.The Telco_Churn dataset<br>
+contains 7043 rows (customers) and 21 variables (features). The Churn feature<br>
+is the target variable and is of a discrete categorical data type based on if a<br>
+customer has left the company or not.
+
+&nbsp;
+
+```{r message=FALSE, warning=FALSE}
+str(churn)
+```
+
+&nbsp;
+
+## Address Quality & Tidyness Issues
+
+#### Identify & Remove Missing Data
+```{r message=FALSE, warning=FALSE}
+#Id rows
+sapply(churn, function(x) sum(is.na(x)))
+```
+
+Found 11 missing values in the “Total Charges” column. Due to the large size of<br>
+the dataset, removal of the rows will not have an adverse effect on the prediction<br> models.
+
+&nbsp;
+
+```{r message=FALSE, warning=FALSE}
+#remove the rows with missing values
+churn <- churn[complete.cases(churn), ]
+```
+
+&nbsp;
+
+&nbsp;
+
+#### Tidyness Issue: Recode string values
+```{r message=FALSE, warning=FALSE}
+# "No Internet Service" --> "No" for 6 variables [11&13].
+churn$OnlineBackup <- as.factor(mapvalues(churn$OnlineBackup, 
+                                           from=c("No internet service"),
+                                           to=c("No")))
+churn$OnlineSecurity <- as.factor(mapvalues(churn$OnlineSecurity, 
+                                           from=c("No internet service"),
+                                           to=c("No")))
+churn$DeviceProtection <- as.factor(mapvalues(churn$DeviceProtection, 
+                                           from=c("No internet service"),
+                                           to=c("No")))
+churn$TechSupport <- as.factor(mapvalues(churn$TechSupport, 
+                                           from=c("No internet service"),
+                                           to=c("No")))
+churn$StreamingTV <- as.factor(mapvalues(churn$StreamingTV, 
+                                           from=c("No internet service"),
+                                           to=c("No")))
+churn$StreamingMovies <- as.factor(mapvalues(churn$StreamingMovies, 
+                                           from=c("No internet service"),
+                                           to=c("No")))
+
+#"No Phone Service" --> "No" for the MultipleLines variable [11&13]. 
+churn$MultipleLines <- as.factor(mapvalues(churn$MultipleLines, 
+                                           from=c("No phone service"),
+                                           to=c("No")))
+#(Rokicki, 2012; R Documentation: Levels Attributes)
+```
+&nbsp;
+
+
+
+#### Tidyness Issue: Recode Senior Citizen variable to binary numeric values
+```{r message=FALSE, warning=FALSE}
+# Change the values in the SeniorCitizen column from 0 or 1 to "No" or "Yes"
+churn$SeniorCitizen <- as.factor(mapvalues(churn$SeniorCitizen, 
+                                           from=c("0","1"),
+                                           to=c("No","Yes")))
+#(Rokicki, 2012; R Documentation: Levels Attributes)
+```
+
+&nbsp;
+
+#### Tidyness Issue: Divide Tenure variable into bins
+Divide the Tenure variable into bins based on the range of the numeric data.<br>
+Change the numeric type of the Tenure variable to a factor and add it to the data<br>
+frame as a new variable tenure_grp. Additionally, five bins will be created<br>
+representing the number of months a customer has been with the company. 
+
+```{r}
+#variable range?
+min(churn$tenure)
+max(churn$tenure)
+```
+
+```{r}
+#Bin Creation
+#Change numeric variable to a factor. 
+#Save to data frame as a new variable tenure_grp
+
+churn$tenure_grp <- factor(churn$tenure)
+
+churn$tenure_grp <- ifelse(churn$tenure>=0 & churn$tenure<=12,
+                                "0-12", churn$tenure_grp)
+churn$tenure_grp <- ifelse(churn$tenure>12 & churn$tenure<=24,
+                                "12-24", churn$tenure_grp)
+churn$tenure_grp <- ifelse(churn$tenure>24 & churn$tenure<=48,
+                                "24-48", churn$tenure_grp)
+churn$tenure_grp <- ifelse(churn$tenure>48 & churn$tenure<=60,
+                                "48-60", churn$tenure_grp)
+churn$tenure_grp <- ifelse(churn$tenure>60,
+                                ">60", churn$tenure_grp)
+churn$tenure_grp <- factor(churn$tenure_grp, 
+                                levels = c("0-12", 
+                                           "12-24", 
+                                           "24-48",
+                                           "48-60",
+                                           ">60"))
+#(Rokicki, 2012; R Documentation: Levels Attributes)
+```
+
+```{r}
+#Drop columns no longer needed for analysis
+churn$customerID <- NULL
+churn$tenure <- NULL 
+
+#rearrange columns so the target var is last
+churn<- churn[c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,20,19)]
+```
+
+------
+
+# Exploratory Data Analysis
+
+## Descriptive Statistics
+```{r}
+#Statistics that describe the basic features of the dataset. 
+summary(churn)
+```
+
+&nbsp;
+
+
+## Univariate Analysis 
+
+#### Categorical Variable Bar Graphs
+
+```{r fig.width=8,fig.height=4, echo=FALSE, message=FALSE, warning=FALSE}
+g1 <- ggplot(churn, aes(x=Gender)) + 
+  ggtitle("Gender") + 
+  xlab("Gender") + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + 
+  ylab("Frequency(%)") + 
+  coord_flip() + 
+  theme_bw()
+g2 <- ggplot(churn, aes(x=SeniorCitizen)) + 
+  ggtitle("Senior Citizen") +
+  xlab("Senior Citizen") + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + 
+  ylab("Frequency(%)") + 
+  coord_flip() + 
+  theme_bw()
+g3 <- ggplot(churn, aes(x=Partner)) + ggtitle("Partner") +
+  xlab("Partner") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + 
+  ylab("Frequency(%)") + 
+  coord_flip() + 
+  theme_bw()
+g4 <- ggplot(churn, aes(x=Dependents)) + ggtitle("Dependents") +
+  xlab("Dependents") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + 
+  ylab("Frequency(%)") + 
+  coord_flip() + 
+  theme_bw()
+grid.arrange(g1, g2, g3, g4, ncol=2)
+```
+
+&nbsp;
+
+```{r fig.width=8,fig.height=4, echo=FALSE, message=FALSE, warning=FALSE}
+g5 <- ggplot(churn, aes(x=PhoneService)) + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + 
+  coord_flip() + 
+  theme_bw()+
+  ggtitle('Phone Service') + 
+  labs(x='Phone Service',y='Frequency(%)')
+g6 <- ggplot(churn, aes(x=MultipleLines)) +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + 
+  coord_flip() + 
+  theme_bw()+
+  ggtitle('Multiple Lines') + 
+  labs(x='Multiple Lines',y='Frequency(%)')
+g7 <- ggplot(churn, aes(x=InternetService)) + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + 
+  coord_flip() + 
+  theme_bw()+
+  ggtitle('Internet Service') + 
+  labs(x='Internet Service',y='Frequency(%)')
+g8 <- ggplot(churn, aes(x=OnlineSecurity)) +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + 
+  coord_flip() + 
+  theme_bw()+
+  ggtitle('Online Security') + 
+  labs(x='Online Security',y='Frequency(%)')
+grid.arrange(g5, g6, g7, g8, ncol=2)
+```
+
+&nbsp;
+
+```{r fig.width=8,fig.height=4, echo=FALSE, message=FALSE, warning=FALSE}
+g9 <- ggplot(churn, aes(x=OnlineBackup)) + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + 
+  coord_flip() + 
+  theme_bw()+ 
+  ggtitle('Online Backup') + 
+  labs(x='Online Backup',y='Frequency(%)')
+g10 <- ggplot(churn, aes(x=DeviceProtection)) + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + 
+  coord_flip() + 
+  theme_bw()+ 
+  ggtitle('Device Protection') + 
+  labs(x='Device Protection',y='Frequency(%)')
+g11 <- ggplot(churn, aes(x=TechSupport)) + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + 
+  coord_flip() + 
+  theme_bw()+ 
+  ggtitle('Tech Support') + 
+  labs(x='Tech Support',y='Frequency(%)')
+g12 <- ggplot(churn, aes(x=StreamingTV)) +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + 
+  coord_flip() + 
+  theme_bw()+
+  ggtitle('Streaming TV') + 
+  labs(x='Streaming TV',y='Frequency(%)')
+grid.arrange(g9, g10, g11, g12, ncol=2)
+```
+
+&nbsp;
+
+```{r fig.width=8,fig.height=6, echo=FALSE, message=FALSE, warning=FALSE}
+g13 <- ggplot(churn, aes(x=StreamingMovies)) + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + 
+  coord_flip() + 
+  theme_bw()+
+  ggtitle('Streaming Movies') + 
+  labs(x='Streaming Movies',y='Frequency(%)')
+g14 <- ggplot(churn, aes(x=Contract)) + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + 
+  coord_flip() + 
+  theme_bw()+
+  ggtitle('Contract') + 
+  labs(x='Contract',y='Frequency(%)')
+g15 <- ggplot(churn, aes(x=PaperlessBilling)) + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + 
+  coord_flip() + 
+  theme_bw()+
+  ggtitle('Paperless Billing') + 
+  labs(x='Paperless Billing',y='Frequency(%)')
+g16 <- ggplot(churn, aes(x=PaymentMethod)) +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + 
+  coord_flip() + 
+  theme_bw()+
+  ggtitle('Payment Method') + 
+  labs(x='Payment Method',y='Frequency(%)')
+g17 <- ggplot(churn, aes(x=tenure_grp)) +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + 
+  coord_flip() + 
+  theme_bw() +
+  ggtitle('Tenure') + 
+  labs(x='Tenure (months)',y='Frequency(%)')
+grid.arrange(g13, g14, g15, g16, g17,ncol=2)
+```
+
+&nbsp;
+
+**Summary**
+
+The Telco_Churn dataset contains 7032 customer samples comprised of 19 independent variables that affect a customer’s retention. There are 16 categorical and 2 quantitative variables contained in the dataset. Bar charts were used to better understand the frequency(count) percentage of the independent variables. The 19 independent variables are the primary features of interest and are critical to understanding how they correlate to customer churn status.
+
+&nbsp;
+
+## Bivariate Analysis
+```{r fig.width=8,fig.height=5, echo=FALSE, message=FALSE, warning=FALSE}
+data("churn")
+
+corr_plot <- function(data, mapping, ...){
+  p <- ggplot(data = churn[, 17:18], mapping = mapping) + 
+    geom_point(alpha=0.4,size = 0.7) + 
+    geom_smooth(method=loess, fill="red", color="red", ...) 
+  p
+}
+
+g18 = ggpairs(churn,columns = 17:18, lower = list(continuous = corr_plot))
+g18 + theme_classic() + 
+  ggtitle('Correlation Plot: Monthly vs Total Charges')+ 
+  theme(text = element_text(size=12)) 
+
+#(Prone-R,D.,2016).
+```
+
+&nbsp;
+
+**Summary**
+
+A Pearson correlation coefficient was computed to assess the relationship between the Monthly and Total charges customers were billed. There was a moderate, positive correlation between the two variables, r = 0.65, n = 7,032. Increases in monthly charges were correlated with increases in total charges. A correlation plot summarizes the results. Due to the positive correlation the Total Charges variable will be removed from the dataset to help model accuracy. 
+
+The categorical variables have a wide range in count distribution. Therefore, no<br> 
+variable will be discarded, and all will contribute to the machine learning<br>
+algorithms.
+
+&nbsp;
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+churn$TotalCharges <- NULL
+```
+
+------
+
+## Mathematical Model Preprocessing
+
+```{r message=FALSE, warning=FALSE}
+#Copy the dataset
+churn_clean <- churn
+```
+
+#### Encoding Categorical Variables
+Machine learning algorithms require numerical input and output variables.
+```{r message=FALSE, warning=FALSE}
+churn_clean$tenure_grp = factor(churn_clean$tenure_grp,
+                         levels = c('0-12', '12-24', '24-48','48-60','>60'),
+                         labels = c(1, 2, 3, 4, 5))
+churn_clean$PaymentMethod = factor(churn_clean$PaymentMethod,
+                         levels = c('Mailed check','Electronic check',
+                                    'Credit card (automatic)',
+                                    'Bank transfer (automatic)'),
+                         labels = c(1, 2, 3, 4))
+churn_clean$Contract = factor(churn_clean$Contract,
+                         levels = c('One year','Two year','Month-to-month'),
+                         labels = c(1, 2, 3))
+churn_clean$InternetService = factor(churn_clean$InternetService,
+                         levels = c('No','DSL','Fiber optic'),
+                         labels = c(1, 2, 3))
+churn_clean$Gender = factor(churn_clean$Gender,
+                           levels = c('Female', 'Male'),
+                           labels = c(0, 1))
+churn_clean$SeniorCitizen = factor(churn_clean$SeniorCitizen,
+                           levels = c('No', 'Yes'),
+                           labels = c(0, 1))
+churn_clean$Partner = factor(churn_clean$Partner,
+                           levels = c('No', 'Yes'),
+                           labels = c(0, 1))
+churn_clean$Dependents = factor(churn_clean$Dependents,
+                           levels = c('No', 'Yes'),
+                           labels = c(0, 1))
+churn_clean$PhoneService = factor(churn_clean$PhoneService,
+                           levels = c('No', 'Yes'),
+                           labels = c(0, 1))
+churn_clean$MultipleLines = factor(churn_clean$MultipleLines,
+                           levels = c('No', 'Yes'),
+                           labels = c(0, 1))
+churn_clean$OnlineSecurity = factor(churn_clean$OnlineSecurity,
+                           levels = c('No', 'Yes'),
+                           labels = c(0, 1))
+churn_clean$OnlineBackup = factor(churn_clean$OnlineBackup,
+                           levels = c('No', 'Yes'),
+                           labels = c(0, 1))
+churn_clean$DeviceProtection = factor(churn_clean$DeviceProtection,
+                           levels = c('No', 'Yes'),
+                           labels = c(0, 1))
+churn_clean$TechSupport = factor(churn_clean$TechSupport,
+                           levels = c('No', 'Yes'),
+                           labels = c(0, 1))
+churn_clean$StreamingTV = factor(churn_clean$StreamingTV,
+                           levels = c('No', 'Yes'),
+                           labels = c(0, 1))
+churn_clean$StreamingMovies = factor(churn_clean$StreamingMovies,
+                           levels = c('No', 'Yes'),
+                           labels = c(0, 1))
+churn_clean$PaperlessBilling = factor(churn_clean$PaperlessBilling,
+                           levels = c('No', 'Yes'),
+                           labels = c(0, 1))
+churn_clean$Churn = factor(churn_clean$Churn,
+                           levels = c('No', 'Yes'),
+                           labels = c(0, 1))
+#(Eremenko & de Ponteves; Ganesh, 2017)
+```
+
+#### Create Dummy Variables
+Dummy variables must be created to represent the categorical variables in the<br>
+machine learning models.
+```{r message=FALSE, warning=FALSE}
+dmy <- dummyVars(" ~ .", data = churn_clean)
+churn_clean <- data.frame(predict(dmy, newdata = churn_clean))
+#(Amunategui)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#Rename columns to better identify the variable in machine learning results
+library(data.table)
+setnames(churn_clean, old= c("Gender.0",
+                             "Gender.1",
+                             "SeniorCitizen.0",
+                             "SeniorCitizen.1",
+                             "Partner.0",
+                             "Partner.1",
+                             "Dependents.0",
+                             "Dependents.1",
+                             "PhoneService.0",
+                             "PhoneService.1",
+                             "MultipleLines.0",
+                             "MultipleLines.1",
+                             "InternetService.1",
+                             "InternetService.2",
+                             "InternetService.3",
+                             "OnlineSecurity.0",
+                             "OnlineSecurity.1",
+                             "OnlineBackup.0",
+                             "OnlineBackup.1",
+                             "DeviceProtection.0",
+                             "DeviceProtection.1",
+                             "TechSupport.0",
+                             "TechSupport.1",
+                             "StreamingTV.0",
+                             "StreamingTV.1",
+                             "StreamingMovies.0",
+                             "StreamingMovies.1",
+                             "Contract.1",
+                             "Contract.2",
+                             "Contract.3",
+                             "PaperlessBilling.0",
+                             "PaperlessBilling.1",
+                             "PaymentMethod.1",
+                             "PaymentMethod.2",
+                             "PaymentMethod.3",
+                             "PaymentMethod.4",
+                             "MonthlyCharges",
+                             "tenure_grp.1",
+                             "tenure_grp.2",
+                             "tenure_grp.3",
+                             "tenure_grp.4",
+                             "tenure_grp.5",
+                             "Churn.0",
+                             "Churn.1"),
+                      new = c("Gender_Female",
+                              "Gender_Male",
+                              "Not_SeniorCitizen",
+                              "SeniorCitizen",
+                              "No_Partner",
+                              "Partner",
+                              "No_Dependents",
+                              "Dependents",
+                              "No_PhoneService",
+                              "PhoneService",
+                              "No_MultipleLines",
+                              "MultipleLines",
+                              "No_InternetService",
+                              "InternetService_DSL",
+                              "InternetService_FiberOptic",
+                              "No_OnlineSecurity",
+                              "OnlineSecurity",
+                              "No_OnlineBackup",
+                              "OnlineBackup",
+                              "No_DeviceProtection",
+                              "DeviceProtection",
+                              "No_TechSupport",
+                              "TechSupport",
+                              "No_StreamingTV",
+                              "StreamingTV",
+                              "No_StreamingMovies",
+                              "StreamingMovies",
+                              "Contract_1yr",
+                              "Contract_2yr",
+                              "Contract_Month_to_Month",
+                              "No_PaperlessBilling",
+                              "PaperlessBilling",
+                              "PaymentMethod_MailedCheck",
+                              "PaymentMethod_ElectronicCheck",
+                              "PaymentMethod_CreditCard",
+                              "PaymentMethod_BankTransfer",
+                              "MonthlyCharges",
+                              "TenureGroup_1",
+                              "TenureGroup_2",
+                              "TenureGroup_3",
+                              "TenureGroup_4",
+                              "TenureGroup_5",
+                              "No_Churn",
+                              "Yes_Churn"))
+```
+
+#### Train/Test Split
+```{r message=FALSE, warning=FALSE}
+library(caTools)
+set.seed(123)
+split = sample.split(churn_clean$Yes_Churn, SplitRatio = 0.8)
+training_set = subset(churn_clean, split == TRUE)
+test_set = subset(churn_clean, split == FALSE)
+#(Eremenko & de Ponteves)
+```
+
+#### Feature Scaling
+Values do not have the same eucledian distance, and therefore do not have the<br>
+same scale. Transforming values is necessary so all values are on the same scale.
+```{r}
+training_set[,37] = scale(training_set[,37])
+test_set[,37] = scale(test_set[,37])
+#(Eremenko & de Ponteves)
+```
+
+#### Export processed data file and save as .xlsx file
+```{r message=FALSE, warning=FALSE}
+library(writexl)
+library(readxl)
+
+write_xlsx(churn_clean,"Telco_Churn_Clean.xlsx")
+```
+
+
+------
+
+# Mathematical Modeling
+
+
+## Descriptive Data Mining Method
+The main characteristic of descriptive data mining methods is that they lack a dependent variable in the model.  These models are often referred to as unsupervised data mining methods.  Descriptive data mining methods are used for reducing, summarizing and grouping data.  This module describes the most commonly used descriptive data mining methods (Tufféry, 2011).
+
+
+
+## Principal Component Analysis (PCA)
+
+PCA is one of the most important dimensionality reduction algorithms in machine<br>
+learning. PCA was used in this analysis to identify the most relevant independent<br>
+variables in customer churns status (Tufféry, 2011; Kassambara, Fábio, & Visitor, 2017).
+```{r}
+#PCA Model
+library(factoextra)
+res.pca <- prcomp(training_set[, 1:42], scale = TRUE)
+```
+
+&nbsp;
+
+```{r fig.width=8,fig.height=4, echo=FALSE, message=FALSE, warning=FALSE}
+#scree plot
+g19 <- fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 20))
+g19 + theme_bw() +  
+  ggtitle('Scree Plot')+ 
+  theme(text = element_text(size=14)) 
+```
+
+&nbsp;
+
+#### Eigenvalues Table
+```{r}
+eig.val <- get_eigenvalue(res.pca)
+eig.val[1:3,]
+```
+
+&nbsp;
+
+PCA results show the first three dimensions account for 37.4% of the explained<br>
+variance. 
+
+
+```{r fig.width=9,fig.height=9, echo=FALSE, message=FALSE, warning=FALSE}
+# PCA Plot of the top contributing independent variables. 
+g20 <- fviz_pca_var(res.pca,
+             col.var = "contrib", # Color by contributions to the PC
+             select.var = list(contrib = 10),
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE) # Avoid text overlapping
+g20 + theme_bw() +  
+  ggtitle('PCA Correlation Circle')+ 
+  theme(text = element_text(size=12)) 
+```
+
+
+&nbsp;
+
+
+```{r fig.width=10,fig.height=5, echo=FALSE, message=FALSE, warning=FALSE}
+# Total cos2 of variables on Dim.1 and Dim.2
+fviz_cos2(res.pca, choice = "var", axes = 1:2)
+```
+
+
+&nbsp;
+
+Note that, a high cos2 value indicates a good representation of the variable on the principal component axis. A variable with a high cos2 value will be represented on the correlation circle by a vector end point near the circumference. A low cos2 indicates that the variable is not perfectly represented by the principal components and will be represented by a short vector close to the circle origin (Kassambara, Fábio, & Visitor, 2017; Tufféry, 2011).
+ 
+Summary
+The PCA results show the top variables that influence customer attrition are Monthly Charges, Fiber Optic Internet Service, the ability to stream TV and Movies and to a lesser extent participating in a month-to-month contract.
+
+
+&nbsp;
+
+## Predictive Data Mining Methods
+
+## Logistic Regression
+Logistic Regression is used when the dependent (response) variable is<br>
+categorical. The primary objective of logistic regression is to model the mean<br>
+of the response variable, given a set of predictor variables. However, what<br>
+distinguishes logistic regression from linear regression is that the response<br>
+variable is binary rather than continuous in nature (Alice, 2015; Eremenko & de Ponteves; Tufféry, 2011). 
+
+&nbsp;
+
+#### Train/Test Split Dataframe 
+To prevent overfitting, the top 8 key performance indicators results from the PCA will be used an input variables for the logistic regression model.
+```{r}
+#Copy the dataset
+churn_ml <- churn_clean
+```
+
+```{r echo=FALSE}
+#Drop columns no longer needed for analysis.
+#If features are not dropped it will create too much collinearity within the dataset. 
+#and the logistic regression will perform badly. 
+churn_ml$Gender_Male <- NULL
+churn_ml$Gender_Female <- NULL
+churn_ml$Partner <- NULL
+churn_ml$TechSupport <- NULL
+churn_ml$Not_SeniorCitizen <- NULL
+churn_ml$SeniorCitizen <- NULL
+churn_ml$No_Partner <- NULL
+churn_ml$No_Dependents <- NULL
+churn_ml$Dependents <- NULL
+churn_ml$No_PhoneService <- NULL
+churn_ml$PhoneService <- NULL
+churn_ml$No_MultipleLines <- NULL
+churn_ml$MultipleLines <- NULL
+churn_ml$No_InternetService <- NULL
+churn_ml$InternetService_DSL <- NULL
+churn_ml$No_OnlineSecurity <- NULL
+churn_ml$OnlineSecurity <- NULL
+churn_ml$No_OnlineBackup <- NULL
+churn_ml$OnlineBackup <- NULL
+churn_ml$No_TechSupport <- NULL
+churn_ml$No_PaperlessBilling <- NULL
+churn_ml$PaymentMethod_MailedCheck <- NULL
+churn_ml$PaymentMethod_BankTransfer <- NULL
+churn_ml$PaymentMethod_CreditCard <- NULL
+churn_ml$No_DeviceProtection <- NULL
+churn_ml$No_StreamingTV <- NULL
+churn_ml$No_StreamingMovies <- NULL
+churn_ml$TenureGroup_2 <- NULL
+churn_ml$TenureGroup_3 <- NULL
+churn_ml$TenureGroup_4 <-  NULL
+churn_ml$TenureGroup_5 <- NULL
+churn_ml$PaperlessBilling <-NULL
+churn_ml$DeviceProtection <-NULL
+churn_ml$No_Churn <- NULL
+
+#rename dep. var column
+setnames(churn_ml, old=c("Yes_Churn"), new=c("Churn"))
+```
+
+
+```{r}
+# Train/Test Split
+library(caTools)
+set.seed(123)
+split = sample.split(churn_ml$Churn, SplitRatio = 0.8)
+training = subset(churn_ml, split == TRUE)
+testing = subset(churn_ml, split == FALSE)
+```
+
+```{r}
+# Feature Scaling
+training[,8] = scale(training[,8])
+testing[,8] = scale(testing[,8])
+```
+
+
+```{r }
+# Fitting Logistic Regression to the Training set
+log_classifier <- glm(formula = Churn ~ .,
+                 family = binomial,
+                 data = training)
+summary(log_classifier)
+#(Eremenko & de Ponteves)
+```
+
+Logistic regression results show statistically significant p-values for Fiber Optic Internet, Contracts, and TenureGroup_1. Interestingly, the month-to-contract factor wasn’t used in this algorithm due to a high collinearity with another factor. Further classification analysis should be conducted to further identify the importance of this variable (Alice, 2015).
+
+```{r}
+#Feature Analysis
+anova(log_classifier, test="LRT")
+```
+
+As you can see from the deviance table, the factors that have the greatest impact on churn outcome, in descending order, are Contract_2yr, InternetService_FiberOptic and TenureGroup_1.
+
+### Logistic Regression Predictability Assessment
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Predicting the Test set results 
+testing$Churn <- as.character(testing$Churn)
+testing$Churn[testing$Churn=="No"] <- "0"
+testing$Churn[testing$Churn=="Yes"] <- "1"
+
+prob_pred <- predict(log_classifier,newdata=testing,type='response')
+y_pred =ifelse(prob_pred > 0.5, 1, 0 ) 
+
+# Logistic Regression Confusion Matrix
+print("Logistic Regression Confusion Matrix")
+table(Predicted = y_pred, Actual = testing$Churn)
+#(Eremenko & de Ponteves)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#Accuracy Calculation
+misClasificError <- mean(y_pred != testing$Churn)
+print(paste('Logistic Regression Accuracy(%) =',((1-misClasificError) *100)))
+#(Eremenko & de Ponteves)
+```
+
+A ROC curve and the AUC (area under the curve) will be calculated which are typical performance measurements for a binary classifier. The ROC is a curve created by plotting the true positive rate (TPR) against the false positive rate (FPR) at various threshold settings while the AUC is the area under the ROC curve. A model with good predictive ability should have an AUC closer to 1 (ideal) than to 0.5 (Tufféry, 2011; Vogler, 2016).
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(ROCR)
+# Predicting the Test set results 
+testing$Churn <- as.character(testing$Churn)
+testing$Churn[testing$Churn=="No"] <- "0"
+testing$Churn[testing$Churn=="Yes"] <- "1"
+
+prob_pred <- predict(log_classifier,newdata=testing,type='response')
+
+#ROC plot
+pr <- prediction(prob_pred, testing$Churn)
+prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+plot(prf, main = "ROC Curve", ylab = "True Positive Rate (Sensitivity)",
+     xlab ="False Positive Rate (1-Specificity)")
+#(Vogler, 2016)
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+auc <- performance(pr, measure = "auc")
+auc <- auc@y.values[[1]]
+print(paste('AUC Results =',((auc))))
+#(Vogler, 2016).
+```
+
+**Summary**
+
+&nbsp;
+
+The Logistic regression algorithm performed well with an accuracy of 78.5% and an AUC value of 0.824. The PCA analysis indicated the streaming media and Monthly Charges were top factors while the logistic regression analysis indicates Tenure and Fiber Optic internet to be of greater importance. Note, Contract_Month_to_Month data was not used in this analysis and the results may be skewed. Future work can be done to enhance the model’s accuracy by utilizing a backward elimination method.  
+
+
+# Tree Based Machine Learning Algorithms
+Tree based machine learning algorithms are based on the statistical ‘bootstrapping’ technique. In bootstrapping, given a sample of size N, we create datasets of size N by sampling this original dataset with replacement. Machine Learning models are built on the different bootstrapped samples and then averaged (Rickert, 2013; Tufféry, 2011).
+
+## Decision Tree Model
+Decision Trees Classifications are a form of regression model in the form of a tree structure. The topmost decision node, known as the “root node”, corresponds to the best predictor variable. Decision trees can handle both categorical and numerical data which is the primary reason it is utilized in this data analysis. Using the top-most fluencing variables from the PCA and Logistic Regression results, a Decision Tree analysis will be performed to further identify useful information (Analytics Vidhya Content Team, 2018; Rickert, 2013; Tufféry, 2011). 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#Copy the dataset
+churn_tree <- churn_clean
+
+#drop var.
+churn_tree$No_Churn <- NULL
+
+#rename dep. var column
+setnames(churn_tree, old=c("Yes_Churn"), new=c("Churn"))
+```
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Train/Test Split
+library(caTools)
+set.seed(2018)
+split = sample.split(churn_tree$Churn, SplitRatio = 0.7)
+training = subset(churn_tree, split == TRUE)
+testing = subset(churn_tree, split == FALSE)
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Feature Scaling
+# Values do not have the same eucledian distance, and therefore do not have the<br>
+# same scale. Transforming values is necessary so all values are on the same scale.
+training[,37] = scale(training[,37])
+testing[,37] = scale(testing[,37])
+```
+
+
+```{r fig.width=10,fig.height=10, message=FALSE, warning=FALSE}
+# Fitting Decision Tree to the Training set
+tree_classifier <- ctree(Churn~., training) 
+#(Eremenko & de Ponteves)
+```
+
+
+```{r fig.width=7,fig.height=6.7, echo=FALSE, message=FALSE, warning=FALSE}
+#Plot pruned Decision Tree
+form <- as.formula(Churn~., training)
+tree.2 <- rpart(form,training)	
+
+fancyRpartPlot(tree.2,
+               #palettes=c("Reds"),
+               main="Decision Tree: Customer Churn") 
+#(Rickert, 2013)
+```
+
+&nbsp;
+
+#### Decision Tree Predictablity Assessment
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Predicting the Test set results - Accuracy Calculation 
+testing$Churn <- as.character(testing$Churn)
+testing$Churn[testing$Churn=="No"] <- "0"
+testing$Churn[testing$Churn=="Yes"] <- "1"
+
+y_pred_dt = predict(tree_classifier, newdata = testing[-43], type = "response")
+y_pred =ifelse(y_pred_dt > 0.5, 1, 0 ) 
+
+misClasificError <- mean(y_pred != testing$Churn)
+
+print(paste('Decision Tree Classification Accuracy(%) =',((1-misClasificError) *100)))
+#(Eremenko & de Ponteves)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(ROCR)
+# Predicting the Test set results 
+testing$Churn <- as.character(testing$Churn)
+testing$Churn[testing$Churn=="No"] <- "0"
+testing$Churn[testing$Churn=="Yes"] <- "1"
+
+y_pred_dt = predict(tree_classifier, newdata = testing, type = "response")
+
+#ROC plot
+pr_dt <- prediction(y_pred_dt, testing$Churn)
+prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+plot(prf, main = "ROC Curve", ylab = "True Positive Rate (Sensitivity)",
+     xlab ="False Positive Rate (1-Specificity)")
+```
+
+&nbsp;
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+auc <- performance(pr_dt, measure = "auc")
+auc <- auc@y.values[[1]]
+print(paste('AUC Results =',((auc))))
+```
+
+&nbsp;
+
+**Summary**
+
+The Decision Tree model has an accuracy of 79.3% and an AUC value equal to 0.83 with results indicating the most important variables in predicting a customer’s churn status are month-to-month contract and Fiber Optic Internet Service. A person who is in a month-to-month contract, has fiber optic Internet Service and has been with the company for less than one year, has the highest probability of leaving the company.
+
+&nbsp;
+
+## Random Forest Classification Model
+Random forest is a supervised learning algorithm that builds multiple decision trees and merges them together to get a more accurate and stable prediction (Eremenko & de Ponteves; Ganesh, 2017; Padda, 2018; Rickert, 2013; Tufféry, 2011).
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#Copy the dataset
+churn_rf <- churn_clean
+
+#drop var.
+churn_rf$No_Churn <- NULL
+
+#rename dep. var column
+setnames(churn_rf, old=c("Yes_Churn"), new=c("Churn"))
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#### Train/Test Split
+library(caTools)
+set.seed(2018)
+split = sample.split(churn_rf$Churn, SplitRatio = 0.7)
+training = subset(churn_rf, split == TRUE)
+testing = subset(churn_rf, split == FALSE)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Feature Scaling
+# Values do not have the same eucledian distance, and therefore do not have the<br>
+# same scale. Transforming values is necessary so all values are on the same scale.
+training[,37] = scale(training[,37])
+testing[,37] = scale(testing[,37])
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Fitting RF Model to the Training set
+library(randomForest)
+
+set.seed(123)
+rf_classifier <- randomForest(Churn ~., data = training, 
+                       ntree = 500, 
+                       importance = TRUE, 
+                       proximity = TRUE)
+print(rf_classifier)
+#(Eremenko & de Ponteves)
+```
+&nbsp;
+
+Out of Bag (OOB) Error: In Random Forest and Gradient Boosting for each bootstrap sample taken from the dataset, there will be samples left out, these are known as Out of Bag samples. Classification accuracy carried out on these OOB samples is known as OOB error (Padda, 2018; Rickert, 2013; Tufféry, 2011).
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+plot(rf_classifier)
+#(Eremenko & de Ponteves; Ganesh, 2017; Padda, 2018; Rickert, 2013)
+```
+
+&nbsp;
+
+#### Random Forest Predictablity Assessment
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Predicting the Test set results - Accuracy Calculation 
+testing$Churn <- as.character(testing$Churn)
+testing$Churn[testing$Churn=="No"] <- "0"
+testing$Churn[testing$Churn=="Yes"] <- "1"
+
+y_pred_rf = predict(rf_classifier, newdata = testing[-43], type = "response")
+y_pred =ifelse(y_pred_rf > 0.5, 1, 0 ) 
+
+misClasificError <- mean(y_pred != testing$Churn)
+
+print(paste('Random Forest Classification Accuracy(%) =',((1-misClasificError) *100)))
+```
+
+&nbsp;
+
+```{r message=FALSE, warning=FALSE}
+#Tuning 
+rf_tune <- tuneRF(training[, -43], 
+                  training[, 43], 
+                  stepFactor = 0.5, 
+                  plot = TRUE, 
+                  ntreeTry = 150, 
+                  trace = TRUE, 
+                  improve = 0.05)
+#(Eremenko & de Ponteves; Ganesh, 2017; Padda, 2018; Rickert, 2013)
+```
+
+&nbsp;
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#Fit After Tuning
+rf_new <- randomForest(Churn ~., data = training, 
+                       ntree = 100, 
+                       mtry = 7, 
+                       importance = TRUE, 
+                       proximity = TRUE)
+print(rf_new)
+```
+
+&nbsp;
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#Variable Importance Plot
+varImpPlot(rf_classifier,
+           type = 1,
+           n.var = 5,
+           sort = T,
+           main = "Variable Importance")
+#(Eremenko & de Ponteves; Ganesh, 2017; Padda, 2018; Rickert, 2013)
+```
+
+
+&nbsp;
+
+The percent increase in mean square error (MSE) for each variable if it were<br>
+omitted from the analysis. Therefore, the higher the %IncMSE value, the more<br>
+important the variable in determing outcome (Padda, 2018; Rickert, 2013; Tufféry, 2011).
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Predicting the Test set results - Accuracy Calculation 
+testing$Churn <- as.character(testing$Churn)
+testing$Churn[testing$Churn=="No"] <- "0"
+testing$Churn[testing$Churn=="Yes"] <- "1"
+
+y_pred_rf_new = predict(rf_new, newdata = testing[-43], type = "response")
+y_pred =ifelse(y_pred_rf_new > 0.5, 1, 0 ) 
+
+misClasificError <- mean(y_pred != testing$Churn)
+
+print(paste('Random Forest Classification Accuracy(%) =',((1-misClasificError) *100)))
+```
+
+&nbsp;
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(ROCR)
+# Predicting the Test set results 
+testing$Churn <- as.character(testing$Churn)
+testing$Churn[testing$Churn=="No"] <- "0"
+testing$Churn[testing$Churn=="Yes"] <- "1"
+
+y_pred_rf_roc = predict(rf_new, newdata = testing, type = "response")
+
+#ROC plot
+pr_rf <- prediction(y_pred_rf_roc, testing$Churn)
+prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+plot(prf, main = "ROC Curve", ylab = "True Positive Rate (Sensitivity)",
+     xlab ="False Positive Rate (1-Specificity)")
+#(Eremenko & de Ponteves; Ganesh, 2017; Padda, 2018; Rickert, 2013)
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+auc <- performance(pr_rf, measure = "auc")
+auc <- auc@y.values[[1]]
+print(paste('AUC Results =',((auc))))
+```
+
+
+The Random Forest machine learning algorithm performed at a 78.8% accuracy.Interestingly, the Random Forest results show the top most important independent variables to be a month-to-month contract, Tenure less than 1 year and the total monthly charges which differs from the Decision Tree model results. Future work to improve upon the accuracy of the Random Forest can be done by creating a random forest iteration with fewer trees and include fewer important variables.
+
+------
+
+# Conclusion
+
+
+An analysis on customer churn data was conducted to better predict customer churn outcomes. Customer attrition, also known as churn, is defined to be when customers stop doing business with a company. Churn is a growth decelerator and tracking the churn rate is essential to business success (Customer Churn Prediction, Prevention & Analysis, 2017; Tufféry, 2011). The telecommunications dataset contained 7043 observations with 20 independent variables and a bininary, dependant variable with the customer churn outcome. The dataset was imported into R Studio using the readr library. Data preprocessing techniques were used to address qualify and tidyness issues. A Univariate analysis was conducted on the 17 discrete categorical variables. Bar charts were utilized to display the frequency data. Discriptive analysis show that the dataset has an even distribution of men and women. The majority of customers have been with company less than a year, participate in paperless billing, have a month-to-month contract and pay their bill using an electonic check. A Pearson correlation coefficient was computed to assess the statistical relationship between the Monthly and Total charges billed to customers. Increases in monthly charges were moderately correlated,r = 0.65, with increases in total charges. Due to the correlative relationship between the variables, the Total Charges factor was removed from the dataset to help model accuracy.
+
+Several statistical algorithms were used to understand the relationship between the independent variables and the target variable. Principal component analysis (PCA), a dimension-reducing technique, was used to identify the top-most relevant independent variables in customer churns status. Logistic Regression models are ideal for binary, categorical analysis and was used in this analysis. To prevent overfitting, the top 8 key performance indicator results from the PCA were used in the logistic regression model. Tree based learning algorithms were used in this analysis because they are considered to be one of the best and mostly used supervised learning methods because they empower predictive models with high accuracy, stability and ease of interpretation (Analytics Vidhya Content Team, 2018).
+
+The PCA analysis showed the top performance indictors in determining customer churn are monthly charges, fiber optic internet and month-to-month contracts. The logistic regression analysis results show Tenure Less than 1 year and Fiber Optic internet to be of the key performance indicators for predicting attrition. The Decision Tree model had the best accuracy result, showing Month-to_Month Contract, Fiber Optic Internet Service, and Tenure (less than 1 year) as the key factors customer churn. Interestingly, the Random Forest model performed comparatively to the Logistic Regression Model in terms of accuracy and AUC performance. The results of the Random Forest model also found Month-to-Month Contract as the top most factor, and placed Tenure (less than 1 year) and Monthly Charges over Fiber Optic Internet Service in order of variable importance. 
+
+In summary, key indicator variables associated with customer churn are Month-to_Month Contract, Monthly Charges,Fiber Optic Internet Service and Tenure (less than 1 year). Results show a high churn probability in customers who are in a month-to-month contract, have been with the company less than one year and have Fiber Optic internet service. Customers with the lowest churn probability participate in 1- or 2-year contracts, have DSL internet and have been with the company more than one year and do not participate in paperless billing. 
+
+
+## References
+
+       
+1.	Analytics Vidhya Content Team. (2018, April 18). A Complete Tutorial on <br>
+      Tree Based Modeling from Scratch (in R & Python). Retrieved from<br> 
+      https://www.analyticsvidhya.com/blog/2016/04/complete-tutorial-tree-<br>
+      based-modeling-scratch-in-python/  
+
+2.	Alice, M. (2015, September 13). How to perform a Logistic Regression in<br>
+      R. Retrieved from https://www.r-bloggers.com/how-to-perform-a-logistic<br>
+      -regression-in-r/ (Alice, 2015).
+
+3.	Amunategui, M. (n.d.). Brief Walkthrough Of The dummyVars Function From<br>
+      {caret}. Retrieved December 12, 2018, from https://amunategui.github.<br>
+      io/dummyVar-Walkthrough/  
+
+4.	Condition a ..count.. summation on the faceting variable. (2012, July 19).<br>
+      Retrieved from https://stackoverflow.com/questions/11567389/condition-<br>
+      a-count-summation-on-the-faceting-variable 
+
+5.	Correlation matrix: A quick start guide to analyze, format and visualize<br>
+      a correlation matrix using R software. (n.d.). Retrieved December 12,<br>
+      2018 from http://www.sthda.com/english/wiki/correlation-matrix-a-quick<br>
+      -start-guide-to-analyze-format-and-visualize-a-correlation-matrix-<br>
+      using-r-software
+
+6.	Customer Churn Prediction, Prevention & Analysis. (2017, August).<br>
+      Retrieved December 1, 2018, from https://www.optimove.com/learning-<br>
+      center/customer-churn-prediction-and-prevention
+      
+7.	Eremenko, K., & De Ponteves, H. (n.d.). Machine Learning A-Z (Python & R<br>
+      in Data Science Course). Retrieved December 1, 2018, from<br> 
+      https://www.udemy.com/machinelearning 
+
+8.	Ganesh, T. V. (2017, November 06). Practical Machine Learning with R and<br> 
+      Python – Part 5. Retrieved from https://www.r-bloggers.com/practical-<br>
+      machine-learning-with-r-and-python-part-5/  
+
+9.	Kassambara, Fábio, & Visitor. (2017, September 24). CA - Correspondence<br> 
+      Analysis in R: Essentials. Retrieved from<br> 
+      http://www.sthda.com/english/articles/31-principal-component-methods-<br>
+      in-r-practical-guide/113-ca-correspondence-analysis-in-r-essentials/ 
+
+10.	Padda, A. (2018, January 26). Introduction to Random Forest. Retrieved<br>  
+      from https://analyticsdefined.com/introduction-random-forests/  
+
+11.	Prone-R, D. (2016, February 16). Multiple regression lines in ggpairs.<br> 
+      Retrieved from https://www.r-bloggers.com/multiple-regression-lines-<br> 
+      in-ggpairs/
+
+12.	R Documentation: Levels Attributes. (n.d.). Retrieved December 12, 2018,<br> 
+      from https://stat.ethz.ch/R-manual/R-devel/library/base/html/levels.html
+
+13.	Rickert, J. (2013, June 19). Draw nicer Classification and Regression <br> 
+      Trees with the rpart.plot package. Retrieved from<br>  
+      https://blog.revolutionanalytics.com/2013/06/plotting-classification-<br> 
+      and-regression-trees-with-plotrpart.html  
+
+14.	Rokicki, S. (2012, October 22). From continuous to categorical. <br> 
+      Retrieved from https://www.r-bloggers.com/from-continuous-to-categorical/  
+
+15.	Statistical tools for high-throughput data analysis (sthda). (n.d.). Add<br> 
+      titles to a plot in R software. Retrieved from http://www.sthda.com/<br> 
+      english/wiki/add-titles-to-a-plot-in-r-software
+
+16.	Tuffery, S. (2011). Data mining and statistics for decision making <br> 
+      (1st Edition ed.). [Western Governors University]. Retrieved from <br> 
+      https://wgu.vitalsource.com/#/books/undefined 
+
+17.	Vogler, R. (2016, June 11). Illustrated Guide to ROC and AUC.<br> 
+      Retrieved from https://www.r-bloggers.com/illustrated-guide-to-roc-and-auc/
+
+18.	Wingate, R. (2018, July 17). Data Quality & Tidiness. Retrieved from <br> 
+      December 1, 2018, from https://ryanwingate.com/purpose/tidy-data/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
