@@ -9,14 +9,14 @@ This folder contains the files for the Telecommunications_Churn_Analysis project
 
 You are an analyst for a telecommunications company that is concerned about the number of customers leaving their landline business for cable competitors. The company needs to know which customers are leaving and attempt to mitigate continued customer loss. You have been asked to analyze customer data to identify why customers are leaving and potential indicators to explain why those customers are leaving so the company can make an informed plan to mitigate further loss.
 
-File- Original Data: 
-        Contains the original IBM Dataset which can be found here - 
-        https://www.ibm.com/communities/analytics/watson-analytics-blog/guide-to-sample-datasets/
+File- Original Data: <br>
+                Contains the original IBM Dataset which can be found here - <br>
+                https://www.ibm.com/communities/analytics/watson-analytics-blog/guide-to-sample-datasets/
 
-File- Processed Data: 
-        Telco_Churn.csv - copied dataset used in analysis
-        Telco_Churn_Clean.xlsx - cleaned data set
-        TelecoChurn_Final.Rmd - R code used in the analysis
+File- Processed Data: <br>
+                Telco_Churn.csv - copied dataset used in analysis<br>
+                Telco_Churn_Clean.xlsx - cleaned data set<br>
+                TelecoChurn_Final.Rmd - R code used in the analysis
 
 #### Software and Libraries
 
